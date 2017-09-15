@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!DOCTYPE mycat:schema SYSTEM "schema.dtd">
+<mycat:schema xmlns:mycat="http://io.mycat/">
+	<schema name="MYCATTESTDB" checkSQLschema="false" sqlMaxLimit="100">
+		<table name="tim_message" dataNode="dnForTest1,dnForTest2,dnForTest3,dnForTest4"
+			rule="auto-sharding-long" />
+	</schema>
+
+	<dataNode name="dnForTest1" dataHost="mycatTestHost53"
+		database="mycat_db_53_1" />
+	<dataNode name="dnForTest2" dataHost="mycatTestHost53"
+		database="mycat_db_53_2" />
+	<dataNode name="dnForTest3" dataHost="mycatTestHost54"
+		database="mycat_db_54_1" />
+	<dataNode name="dnForTest4" dataHost="mycatTestHost54"
+		database="mycat_db_54_2" />
+
+	<dataHost name="mycatTestHost53" maxCon="1000" minCon="10"
+		balance="0" writeType="0" dbType="mysql" dbDriver="jdbc" switchType="1"
+		slaveThreshold="100">
+		<heartbeat>select user()</heartbeat>
+		<!-- can have multi write hosts -->
+		<!-- <writeHost host="53host" url="192.168.171.53:8306" user="root" password="tydic2009" 
+			/> -->
+		<writeHost host="53host" url="jdbc:mysql://192.168.171.53:8306"
+			user="root" password="tydic2009" />
+		<!-- can have multi read hosts <readHost host="hostS2" url="192.168.1.200:3306" 
+			user="root" password="xxx" /> </writeHost> -->
+		<!-- <writeHost host="hostM2" url="localhost:3316" user="root" password="123456"/> -->
+	</dataHost>
+
+	<dataHost name="mycatTestHost54" maxCon="1000" minCon="10"
+		balance="0" writeType="0" dbType="mysql" dbDriver="jdbc" switchType="1"
+		slaveThreshold="100">
+		<heartbeat>select user()</heartbeat>
+		<!-- can have multi write hosts -->
+		<!-- <writeHost host="54host" url="192.168.171.54:8306" user="root" password="tydic2009" 
+			/> -->
+		<writeHost host="54host" url="jdbc:mysql://192.168.171.54:8306"
+			user="root" password="tydic2009" />
+		<!-- <writeHost host="hostM2" url="localhost:3316" user="root" password="123456"/> -->
+	</dataHost>
+
+</mycat:schema>
