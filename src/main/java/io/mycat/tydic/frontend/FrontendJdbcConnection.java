@@ -29,12 +29,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.mycat.MycatServer;
+import io.mycat.backend.mysql.MySQLMessage;
 import io.mycat.config.ErrorCode;
 import io.mycat.config.model.SchemaConfig;
 import io.mycat.config.model.SystemConfig;
 import io.mycat.net.NIOProcessor;
 import io.mycat.net.handler.FrontendPrepareHandler;
 import io.mycat.net.handler.FrontendQueryHandler;
+import io.mycat.net.mysql.OkPacket;
 import io.mycat.server.NonBlockingSession;
 import io.mycat.server.ServerConnection;
 import io.mycat.server.ServerQueryHandler;
@@ -120,7 +122,11 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 				try {
 					while (bf.hasRemaining()) {
 						// System.out.println(StringUtil.decode(readFromBuffer(bf), charset));
-						System.out.println(new String(readFromBuffer(bf)));
+						// System.out.println(new String(readFromBuffer(bf)));
+						// MySQLMessage mm = new MySQLMessage(readFromBuffer(bf));
+						OkPacket ok = new OkPacket();
+						ok.read(readFromBuffer(bf));
+						System.out.println(new String(ok.message));
 					}
 				} catch (Exception e) {
 					recycle(bf);
