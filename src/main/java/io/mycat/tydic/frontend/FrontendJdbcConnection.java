@@ -6,7 +6,7 @@
 package io.mycat.tydic.frontend;
 
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
+import java.nio.ByteBuffer;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -15,8 +15,6 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.NClob;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLClientInfoException;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
@@ -27,8 +25,6 @@ import java.sql.Struct;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,13 +35,14 @@ import io.mycat.config.model.SystemConfig;
 import io.mycat.net.NIOProcessor;
 import io.mycat.net.handler.FrontendPrepareHandler;
 import io.mycat.net.handler.FrontendQueryHandler;
-import io.mycat.route.RouteResultset;
 import io.mycat.server.NonBlockingSession;
 import io.mycat.server.ServerConnection;
 import io.mycat.server.ServerQueryHandler;
 import io.mycat.server.parser.ServerParse;
 import io.mycat.server.util.SchemaUtil;
 import io.mycat.tydic.driver.JdbcDriverBackwardsCompat;
+import io.mycat.util.CompressUtil;
+import io.mycat.util.StringUtil;
 
 /**
  * <p>
@@ -80,6 +77,62 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 		NIOProcessor processor = (NIOProcessor) MycatServer.getInstance().nextProcessor();
 		this.setProcessor(processor);
 
+	}
+
+	public byte[] readFromBuffer(ByteBuffer buffer) {
+		byte[] data = new byte[buffer.remaining()];
+		buffer.get(data);
+		return data;
+
+	}
+
+	@Override
+	public final void write(ByteBuffer buffer) {
+
+		// 首先判断是否为压缩协议
+		if (isSupportCompress()) {
+
+			// CompressUtil为压缩协议辅助工具类
+			ByteBuffer newBuffer = CompressUtil.compressMysqlPacket(buffer, this, compressUnfinishedDataQueue);
+
+			// 将要写的数据先放入写缓存队列
+			writeQueue.offer(newBuffer);
+		} else {
+
+			// 将要写的数据先放入写缓存队列
+			writeQueue.offer(buffer);
+		}
+
+		// if ansyn write finishe event got lock before me ,then writing
+		// flag is set false but not start a write request
+		// so we check again
+		try {
+
+			// 处理写事件
+			ByteBuffer bf = writeBuffer;
+			while ((bf = writeQueue.poll()) != null) {
+				if (bf.limit() == 0) {
+					recycle(bf);
+					close("quit send");
+				}
+
+				bf.flip();
+				try {
+					while (bf.hasRemaining()) {
+						// System.out.println(StringUtil.decode(readFromBuffer(bf), charset));
+						System.out.println(new String(readFromBuffer(bf)));
+					}
+				} catch (Exception e) {
+					recycle(bf);
+					throw e;
+				}
+
+			}
+
+		} catch (Exception e) {
+			LOGGER.warn("write err:", e);
+			this.close("write err:" + e);
+		}
 	}
 
 	public void query(String sql) {
@@ -509,14 +562,10 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 		return 0;
 	}
 
-/*	@Override
-	public void commit() {
-		session.commit();
-	}
-
-	@Override
-	public void rollback() {
-		session.rollback();
-	}*/
+	/*
+	 * @Override public void commit() { session.commit(); }
+	 * 
+	 * @Override public void rollback() { session.rollback(); }
+	 */
 
 }

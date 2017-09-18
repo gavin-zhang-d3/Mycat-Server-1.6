@@ -451,7 +451,8 @@ public abstract class AbstractConnection implements NIOConnection {
 
 
     @Override
-	public final void write(ByteBuffer buffer) {
+    //public final void write(ByteBuffer buffer) {
+	public void write(ByteBuffer buffer) {
     	
     	 //首先判断是否为压缩协议
 		if (isSupportCompress()) {
