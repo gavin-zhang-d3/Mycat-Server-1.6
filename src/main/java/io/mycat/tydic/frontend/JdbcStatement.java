@@ -62,8 +62,8 @@ public class JdbcStatement implements Statement, JdbcStatementBackwardsCompat {
 	}
 
 	public void executeQuery1(String sql) throws SQLException {
-		conn.execute(sql, 4);
-		// conn.query(sql);
+		//conn.execute(sql, 4);
+		conn.query(sql);
 	}
 
 	public int executeUpdate(String sql) throws SQLException {

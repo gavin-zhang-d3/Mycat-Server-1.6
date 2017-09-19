@@ -79,6 +79,47 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 		NIOProcessor processor = (NIOProcessor) MycatServer.getInstance().nextProcessor();
 		this.setProcessor(processor);
 
+		processor.getExecutor().execute(new Runnable() {
+			@Override
+			public void run() {
+				try {
+
+					// 处理写事件
+					ByteBuffer bf = writeBuffer;
+					while (true) {
+						if ((bf = writeQueue.poll()) != null) {
+							if (bf.limit() == 0) {
+								recycle(bf);
+								close("quit send");
+							}
+
+							bf.flip();
+							try {
+								while (bf.hasRemaining()) {
+									// System.out.println(StringUtil.decode(readFromBuffer(bf), charset));
+									System.out.println(new String(readFromBuffer(bf)));
+									// MySQLMessage mm = new MySQLMessage(readFromBuffer(bf));
+									/*	OkPacket ok = new OkPacket();
+										ok.read(readFromBuffer(bf));
+										System.out.println(new String(ok.message))*/;
+
+								}
+							} catch (Exception e) {
+								recycle(bf);
+								throw e;
+							}
+
+						}
+					}
+
+				} catch (Exception e) {
+					LOGGER.warn("write err:", e);
+					close("write err:" + e);
+				}
+			}
+
+		});
+
 	}
 
 	public byte[] readFromBuffer(ByteBuffer buffer) {
@@ -105,40 +146,6 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 			writeQueue.offer(buffer);
 		}
 
-		// if ansyn write finishe event got lock before me ,then writing
-		// flag is set false but not start a write request
-		// so we check again
-		try {
-
-			// 处理写事件
-			ByteBuffer bf = writeBuffer;
-			while ((bf = writeQueue.poll()) != null) {
-				if (bf.limit() == 0) {
-					recycle(bf);
-					close("quit send");
-				}
-
-				bf.flip();
-				try {
-					while (bf.hasRemaining()) {
-						// System.out.println(StringUtil.decode(readFromBuffer(bf), charset));
-						// System.out.println(new String(readFromBuffer(bf)));
-						// MySQLMessage mm = new MySQLMessage(readFromBuffer(bf));
-						OkPacket ok = new OkPacket();
-						ok.read(readFromBuffer(bf));
-						System.out.println(new String(ok.message));
-					}
-				} catch (Exception e) {
-					recycle(bf);
-					throw e;
-				}
-
-			}
-
-		} catch (Exception e) {
-			LOGGER.warn("write err:", e);
-			this.close("write err:" + e);
-		}
 	}
 
 	public void query(String sql) {

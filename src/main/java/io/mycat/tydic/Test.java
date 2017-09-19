@@ -29,10 +29,10 @@ public class Test {
 		try {
 			Connection conn = DriverManager.getConnection("jdbc:default:connection");
 			JdbcStatement stmt = (JdbcStatement) conn.createStatement();
-			stmt.executeQuery1(
+			/*stmt.executeQuery1(
 					"insert into tim_message(id,from_id,platform,to_id,to_groupId,type,content,created_time) values (45323,'tydic1',1,'tydic2','tydicgroup',2,'lalallallalala',now())");
-
-			// stmt.executeQuery1("select * from tim_message order by created_time");
+					*/
+			 stmt.executeQuery1("select * from tim_message order by created_time");
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
