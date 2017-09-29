@@ -28,6 +28,6 @@ package io.mycat.net;
  */
 public interface NIOHandler {
 
-    void handle(byte[] data);
+	void handle(byte[] data);
 
 }

@@ -43,8 +43,9 @@ import io.mycat.server.ServerQueryHandler;
 import io.mycat.server.parser.ServerParse;
 import io.mycat.server.util.SchemaUtil;
 import io.mycat.tydic.driver.JdbcDriverBackwardsCompat;
+import io.mycat.tydic.handler.FrontendJdbcConnectionHandler;
 import io.mycat.util.CompressUtil;
-import io.mycat.util.StringUtil;
+import io.mycat.util.TimeUtil;
 
 /**
  * <p>
@@ -64,6 +65,9 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 	protected FrontendQueryHandler queryHandler;
 	protected FrontendPrepareHandler prepareHandler;
 	// protected LoadDataInfileHandler loadDataInfileHandler;
+	protected FrontendJdbcConnectionHandler frontendJdbcConnectionHandler;
+
+	protected boolean isSubpacket = false;
 
 	public FrontendJdbcConnection() throws IOException {
 		super();
@@ -71,8 +75,13 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 		this.setCharset("utf8");
 		this.setUser("zhanggh");
 		this.setSchema("MYCATTESTDB");
+
+		this.setMaxPacketSize(16 * 1024 * 1024);
+		this.setPacketHeaderSize(4);
+
 		this.queryHandler = new ServerQueryHandler(this);
 		// this.prepareHandler = new ServerPrepareHandler(this);
+		this.setFrontendJdbcConnectionHandler(new FrontendJdbcConnectionHandler(this));
 		this.setSession2(new NonBlockingSession(this));
 		this.setTxIsolation(sys.getTxIsolation());
 		// this.loadDataInfileHandler = new ServerLoadDataInfileHandler(this);
@@ -80,30 +89,22 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 		this.setProcessor(processor);
 
 		processor.getExecutor().execute(new Runnable() {
+
 			@Override
 			public void run() {
 				try {
-
 					// 处理写事件
-					ByteBuffer bf = writeBuffer;
+					ByteBuffer bf;
+					System.out.println("进入新线程");
 					while (true) {
 						if ((bf = writeQueue.poll()) != null) {
 							if (bf.limit() == 0) {
 								recycle(bf);
 								close("quit send");
 							}
-
 							bf.flip();
 							try {
-								while (bf.hasRemaining()) {
-									// System.out.println(StringUtil.decode(readFromBuffer(bf), charset));
-									System.out.println(new String(readFromBuffer(bf)));
-									// MySQLMessage mm = new MySQLMessage(readFromBuffer(bf));
-									/*	OkPacket ok = new OkPacket();
-										ok.read(readFromBuffer(bf));
-										System.out.println(new String(ok.message))*/;
-
-								}
+								onReadData(bf);
 							} catch (Exception e) {
 								recycle(bf);
 								throw e;
@@ -122,11 +123,94 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 
 	}
 
-	public byte[] readFromBuffer(ByteBuffer buffer) {
-		byte[] data = new byte[buffer.remaining()];
-		buffer.get(data);
-		return data;
+	private void onReadData(ByteBuffer bf) throws IOException {
 
+		if (isSubpacket) {
+			readBuffer.put(bf);
+			readBuffer.flip();
+			isSubpacket = false;
+		} else {
+			readBuffer = bf;
+		}
+
+		int offset = readBufferOffset, length = 0, position = readBuffer.limit();
+		for (;;) {
+			length = getPacketLength(readBuffer, offset);
+			if (length == -1) {
+				if (offset != 0) {
+					this.readBuffer = compactReadBuffer(readBuffer, offset);
+				} else if (readBuffer != null && !readBuffer.hasRemaining()) {
+					throw new RuntimeException(
+							"invalid readbuffer capacity ,too little buffer size " + readBuffer.capacity());
+				}
+				break;
+			}
+			if (position >= offset + length && readBuffer != null) {
+
+				readBuffer.position(offset);
+				byte[] data = new byte[length];
+				readBuffer.get(data, 0, length);
+				frontendJdbcConnectionHandler.handle(data);
+
+				// maybe handle stmt_close
+				if (isClosed()) {
+					return;
+				}
+
+				offset += length;
+
+				if (position == offset) {
+					if (readBuffer != null && !readBuffer.isDirect()
+							&& lastLargeMessageTime < lastReadTime - 30 * 1000L) { // used temp heap
+						if (LOGGER.isDebugEnabled()) {
+							LOGGER.debug(
+									"change to direct con read buffer ,cur temp buf size :" + readBuffer.capacity());
+						}
+						recycle(readBuffer);
+						readBuffer = processor.getBufferPool()
+								.allocate(processor.getBufferPool().getConReadBuferChunk());
+					} else {
+						if (readBuffer != null) {
+							readBuffer.clear();
+						}
+					}
+					// no more data ,break
+					readBufferOffset = 0;
+					break;
+				} else {
+					// try next package parse
+					readBufferOffset = offset;
+					if (readBuffer != null) {
+						readBuffer.position(position);
+					}
+					continue;
+				}
+
+			} else {
+
+				if (!readBuffer.hasRemaining()) {
+					readBuffer = ensureFreeSpaceOfReadBuffer(readBuffer, offset, length);
+					isSubpacket = true;
+				}
+				break;
+			}
+		}
+	}
+
+	protected int getPacketLength(ByteBuffer buffer, int offset) {
+		int headerSize = getPacketHeaderSize();
+		if (isSupportCompress()) {
+			headerSize = 7;
+		}
+
+		if (buffer.limit() < offset + headerSize) {
+			return -1;
+		} else {
+			int length = buffer.get(offset) & 0xff;
+			length |= (buffer.get(++offset) & 0xff) << 8;
+			length |= (buffer.get(++offset) & 0xff) << 16;
+			return length + headerSize;
+		}
 	}
 
 	@Override
@@ -573,6 +657,14 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 	public int getNetworkTimeout() throws SQLException {
 		// TODO Auto-generated method stub
 		return 0;
+	}
+
+	public FrontendJdbcConnectionHandler getFrontendJdbcConnectionHandler() {
+		return frontendJdbcConnectionHandler;
+	}
+
+	public void setFrontendJdbcConnectionHandler(FrontendJdbcConnectionHandler frontendJdbcConnectionHandler) {
+		this.frontendJdbcConnectionHandler = frontendJdbcConnectionHandler;
 	}
 
 	/*
