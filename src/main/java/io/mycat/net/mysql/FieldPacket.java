@@ -24,6 +24,7 @@
 package io.mycat.net.mysql;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 import io.mycat.backend.mysql.BufferUtil;
 import io.mycat.backend.mysql.MySQLMessage;
@@ -59,6 +60,7 @@ import io.mycat.net.FrontendConnection;
  * @author mycat
  */
 public class FieldPacket extends MySQLPacket {
+
 	private static final byte[] DEFAULT_CATALOG = "def".getBytes();
 	private static final byte[] FILLER = new byte[2];
 
@@ -95,11 +97,9 @@ public class FieldPacket extends MySQLPacket {
 	}
 
 	@Override
-	public ByteBuffer write(ByteBuffer buffer, FrontendConnection c,
-			boolean writeSocketIfFull) {
+	public ByteBuffer write(ByteBuffer buffer, FrontendConnection c, boolean writeSocketIfFull) {
 		int size = calcPacketSize();
-		buffer = c.checkWriteBuffer(buffer, c.getPacketHeaderSize() + size,
-				writeSocketIfFull);
+		buffer = c.checkWriteBuffer(buffer, c.getPacketHeaderSize() + size, writeSocketIfFull);
 		BufferUtil.writeUB3(buffer, size);
 		buffer.put(packetId);
 		writeBody(buffer);
@@ -159,20 +159,29 @@ public class FieldPacket extends MySQLPacket {
 		buffer.put((byte) (type & 0xff));
 		BufferUtil.writeUB2(buffer, flags);
 		buffer.put(decimals);
-        buffer.put((byte)0x00);
-        buffer.put((byte)0x00);
+		buffer.put((byte) 0x00);
+		buffer.put((byte) 0x00);
 		//buffer.position(buffer.position() + FILLER.length);
 		if (definition != null) {
 			BufferUtil.writeWithLength(buffer, definition);
 		}
 	}
 
-	public  void write(BufferArray bufferArray) {
+	public void write(BufferArray bufferArray) {
 		int size = calcPacketSize();
 		ByteBuffer buffer = bufferArray.checkWriteBuffer(packetHeaderSize + size);
 		BufferUtil.writeUB3(buffer, size);
 		buffer.put(packetId);
 		writeBody(buffer);
+	}
+
+	@Override
+	public String toString() {
+		return "FieldPacket [catalog=" +new String(catalog) + ", db=" +new String(db) + ", table="
+				+new String(table) + ", orgTable=" + new String(orgTable) + ", name=" + new String(name)
+				+ ", orgName=" +new String(orgName) + ", charsetIndex=" + charsetIndex + ", length=" + length
+				+ ", type=" + type + ", flags=" + flags + ", decimals=" + decimals + ", definition="
+				+ Arrays.toString(definition) + "]";
 	}
 
 }

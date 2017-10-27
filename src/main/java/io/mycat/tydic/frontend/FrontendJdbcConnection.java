@@ -88,14 +88,13 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 		NIOProcessor processor = (NIOProcessor) MycatServer.getInstance().nextProcessor();
 		this.setProcessor(processor);
 
-		processor.getExecutor().execute(new Runnable() {
-
+		/*processor.getExecutor().execute(new Runnable() {
+		
 			@Override
 			public void run() {
 				try {
 					// 处理写事件
 					ByteBuffer bf;
-					System.out.println("进入新线程");
 					while (true) {
 						if ((bf = writeQueue.poll()) != null) {
 							if (bf.limit() == 0) {
@@ -109,17 +108,17 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 								recycle(bf);
 								throw e;
 							}
-
+		
 						}
 					}
-
+		
 				} catch (Exception e) {
 					LOGGER.warn("write err:", e);
 					close("write err:" + e);
 				}
 			}
-
-		});
+		
+		});*/
 
 	}
 
@@ -228,6 +227,23 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 
 			// 将要写的数据先放入写缓存队列
 			writeQueue.offer(buffer);
+		}
+
+		ByteBuffer bf;
+
+		while ((bf = writeQueue.poll()) != null) {
+			if (bf.limit() == 0) {
+				recycle(bf);
+				close("quit send");
+			}
+			bf.flip();
+			try {
+				onReadData(bf);
+			} catch (Exception e) {
+				recycle(bf);
+				LOGGER.warn("poll from writeQueue err:", e);
+			}
+
 		}
 
 	}
@@ -666,11 +682,5 @@ public class FrontendJdbcConnection extends ServerConnection implements Connecti
 	public void setFrontendJdbcConnectionHandler(FrontendJdbcConnectionHandler frontendJdbcConnectionHandler) {
 		this.frontendJdbcConnectionHandler = frontendJdbcConnectionHandler;
 	}
-
-	/*
-	 * @Override public void commit() { session.commit(); }
-	 * 
-	 * @Override public void rollback() { session.rollback(); }
-	 */
 
 }

@@ -1,6 +1,5 @@
 package io.mycat.tydic.handler;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -9,16 +8,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.mycat.backend.mysql.ByteUtil;
-import io.mycat.backend.mysql.MySQLMessage;
-import io.mycat.backend.mysql.nio.handler.LoadDataResponseHandler;
-import io.mycat.backend.mysql.nio.handler.ResponseHandler;
 import io.mycat.net.AbstractConnection;
 import io.mycat.net.NIOHandler;
 import io.mycat.net.mysql.EOFPacket;
 import io.mycat.net.mysql.ErrorPacket;
+import io.mycat.net.mysql.FieldPacket;
 import io.mycat.net.mysql.OkPacket;
 import io.mycat.net.mysql.RequestFilePacket;
-import io.mycat.server.ServerConnection;
 
 public class FrontendJdbcConnectionHandler implements NIOHandler {
 	private static final Logger logger = LoggerFactory.getLogger(FrontendJdbcConnectionHandler.class);
@@ -30,7 +26,8 @@ public class FrontendJdbcConnectionHandler implements NIOHandler {
 
 	private volatile int resultStatus;
 	private volatile byte[] header;
-	private volatile List<byte[]> fields;
+	//private volatile List<byte[]> fields;
+	private volatile List<FieldPacket> fieldPacketList;
 
 	private AtomicInteger ai = new AtomicInteger(0);
 
@@ -38,47 +35,6 @@ public class FrontendJdbcConnectionHandler implements NIOHandler {
 		this.source = source;
 		this.resultStatus = RESULT_STATUS_INIT;
 	}
-
-	public byte[] readFromBuffer(ByteBuffer buffer) {
-		byte[] data = new byte[buffer.remaining()];
-		buffer.get(data);
-		return data;
-
-	}
-
-	/*	public void handleBuffer() {
-	
-			try {
-				// 处理写事件
-				ByteBuffer bf = source.getReadBuffer();
-				while (true) {
-					if ((bf = source.getWriteQueue().poll()) != null) {
-						if (bf.limit() == 0) {
-							source.recycle(bf);
-							source.close("quit send");
-						}
-	
-						bf.flip();
-						try {
-							while (bf.hasRemaining()) {
-	
-								handle(readFromBuffer(bf));
-	
-							}
-						} catch (Exception e) {
-							source.recycle(bf);
-							throw e;
-						}
-	
-					}
-				}
-	
-			} catch (Exception e) {
-				logger.warn("write err:", e);
-				source.close("write err:" + e);
-			}
-	
-		}*/
 
 	public AbstractConnection getSource() {
 		return source;
@@ -106,7 +62,7 @@ public class FrontendJdbcConnectionHandler implements NIOHandler {
 			default:
 				resultStatus = RESULT_STATUS_HEADER;
 				header = data;
-				fields = new ArrayList<byte[]>((int) ByteUtil.readLength(data, 4));
+				fieldPacketList = new ArrayList<FieldPacket>((int) ByteUtil.readLength(data, 4));
 			}
 			break;
 		case RESULT_STATUS_HEADER:
@@ -120,7 +76,7 @@ public class FrontendJdbcConnectionHandler implements NIOHandler {
 				handleFieldEofPacket(data);
 				break;
 			default:
-				fields.add(data);
+				handleFieldPacket(data);
 			}
 			break;
 		case RESULT_STATUS_FIELD_EOF:
@@ -140,6 +96,12 @@ public class FrontendJdbcConnectionHandler implements NIOHandler {
 		default:
 			throw new RuntimeException("unknown status!");
 		}
+	}
+
+	private void handleFieldPacket(byte[] data) {
+		FieldPacket fieldPacket = new FieldPacket();
+		fieldPacket.read(data);
+		fieldPacketList.add(fieldPacket);
 	}
 
 	/**
@@ -179,7 +141,7 @@ public class FrontendJdbcConnectionHandler implements NIOHandler {
 	 * 行数据包处理
 	 */
 	private void handleRowPacket(byte[] data) {
-		System.out.println("handleRowPacket");
+		//System.out.println(new String(data));
 		System.out.println(ai.incrementAndGet());
 	}
 
@@ -188,6 +150,11 @@ public class FrontendJdbcConnectionHandler implements NIOHandler {
 	 */
 	private void handleRowEofPacket(byte[] data) {
 		System.out.println("handleRowEofPacket");
+		System.out.println(new String(data));
+		for (FieldPacket packet : fieldPacketList) {
+			System.out.println(packet.toString());
+			System.out.println("====================");
+		}
 	}
 
 	private void closeNoHandler() {

@@ -36,7 +36,7 @@ public class Test {
 					"insert into tim_message(id,from_id,platform,to_id,to_groupId,type,content,created_time) values ("
 							+ id + ",'tydic1',1,'tydic2','tydicgroup',2,'lalallallalala',now())");*/
 
-			stmt.executeQuery1("select * from tim_message order by created_time");
+			stmt.executeQuery1("select * from tim_message order by id");
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
